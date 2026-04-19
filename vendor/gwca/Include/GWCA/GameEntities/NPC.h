@@ -23,8 +23,7 @@ namespace GW {
         inline bool IsHero() { return (npc_flags & 0x20) != 0; }
         inline bool IsSpirit() { return (npc_flags & 0x4000) != 0; }
         inline bool IsMinion() { return (npc_flags & 0x100) != 0; }
-        //inline bool IsPet() { return (npc_flags & 0xD) != 0; }
-		inline bool IsPet() { return (npc_flags == 0xD); }
+        inline bool IsPet() { return (npc_flags & 0xD) != 0; }
     };
     static_assert(sizeof(NPC) == 48, "struct NPC has incorrect size");
 

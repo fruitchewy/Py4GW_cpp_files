@@ -83,7 +83,10 @@ GW::Constants::Rarity ItemExtension::GetRarity() const {
 
 // Additional methods
 bool ItemExtension::IsSparkly() const { return (gw_item->interaction & 0x2000) == 0; }
-bool ItemExtension::GetIsIdentified() const { return (gw_item->interaction & 1) != 0; }
+// The game's "unidentified" indicator is the IsNotAndCanBeIdentified bit (0x00800000).
+// When the bit is SET, the item is unidentified; when clear, the item is identified or
+// not identifiable. (Prior check `(interaction & 1) != 0` was on the wrong bit.)
+bool ItemExtension::GetIsIdentified() const { return (gw_item->interaction & 0x00800000) == 0; }
 bool ItemExtension::IsPrefixUpgradable() const { return ((gw_item->interaction >> 14) & 1) == 0; }
 bool ItemExtension::IsSuffixUpgradable() const { return ((gw_item->interaction >> 15) & 1) == 0; }
 bool ItemExtension::IsStackable() const { return (gw_item->interaction & 0x80000) != 0; }

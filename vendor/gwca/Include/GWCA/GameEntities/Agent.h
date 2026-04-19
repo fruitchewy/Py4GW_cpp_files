@@ -232,7 +232,8 @@ namespace GW {
         /* +h0194 */ uint8_t h0194[32];
         /* +h01B4 */ uint8_t dagger_status;            // 0x1 = used lead attack, 0x2 = used offhand attack, 0x3 = used dual attack
         /* +h01B5 */ Constants::Allegiance allegiance; // 0x1 = ally/non-attackable, 0x2 = neutral, 0x3 = enemy, 0x4 = spirit/pet, 0x5 = minion, 0x6 = npc/minipet
-        /* +h01B6 */ uint16_t weapon_type;             // 1=bow, 2=axe, 3=hammer, 4=daggers, 5=scythe, 6=spear, 7=sWORD, 10=wand, 12=staff, 14=staff
+        /* +h01B6 */ uint8_t weapon_type;              // 1=bow, 2=axe, 3=hammer, 4=daggers, 5=scythe, 6=spear, 7=sWORD, 10=wand, 12=staff, 14=staff
+        /* +h01B7 */ uint8_t casting_anim_type;        // From Skill+0x32. Set on cast start, cleared on cast end. Animation category for the active cast.
         /* +h01B8 */ uint16_t skill;                   // 0 = not using a skill. Anything else is the Id of that skill
         /* +h01BA */ uint16_t h01BA;
         /* +h01BC */ uint8_t weapon_item_type;
