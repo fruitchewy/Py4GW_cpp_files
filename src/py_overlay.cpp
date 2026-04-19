@@ -129,7 +129,7 @@ void Overlay::GetScreenToWorld() {
 
 GW::Vec3f GetVec3f(const GW::GamePos& gp) {
     auto map = GW::GetMapContext();
-    if (!map || map->sub1->sub2->pmaps.size() <= gp.zplane) [[unlikely]] {
+    if (!map || !map->path || !map->path->staticData || map->path->staticData->map.size() <= gp.zplane) [[unlikely]] {
         auto player = GW::Agents::GetControlledCharacter();
         if (player) return GW::Vec3f(gp.x, gp.y, player->z);
         else return GW::Vec3f(gp.x, gp.y, 0.0f);
@@ -142,7 +142,7 @@ GW::Vec3f GetVec3f(const GW::GamePos& gp) {
 
 
 // =========================
-// GOOD SOLUTION (NO “probe-until-error”)
+// GOOD SOLUTION (NO ï¿½probe-until-errorï¿½)
 // =========================
 // Goal: pick correct zplane for (x,y) without spamming QueryAltitude on invalid planes.
 //
@@ -151,7 +151,7 @@ GW::Vec3f GetVec3f(const GW::GamePos& gp) {
 //  2) Candidate zplanes come from pmaps indices (and optionally player->plane).
 //  3) ONLY test planes whose trapezoids contain (x,y) (fast via spatial grid).
 //  4) Cache is TTL-based (ms) AND keyed by (map_id, x, y, hint_plane) to avoid wrong reuse.
-//     (You can pass hint_plane = player->plane or 0 if you want “no hint”.)
+//     (You can pass hint_plane = player->plane or 0 if you want ï¿½no hintï¿½.)
 //
 // NOTE: This uses your pmaps trapezoids (you already have ConvertTrapezoid/GetPathingMaps).
 
@@ -167,10 +167,10 @@ bool InMapBounds(float x, float y) {
     auto* map = GW::GetMapContext();
     if (!map) return true;
 
-    float minx = map->map_boundaries[1];
-    float miny = map->map_boundaries[2];
-    float maxx = map->map_boundaries[3];
-    float maxy = map->map_boundaries[4];
+    float minx = map->start_pos.x;
+    float miny = map->start_pos.y;
+    float maxx = map->end_pos.x;
+    float maxy = map->end_pos.y;
 
     return x >= minx && x <= maxx && y >= miny && y <= maxy;
 }
@@ -179,10 +179,10 @@ std::vector<uint32_t> GetValidZPlanes() {
     std::vector<uint32_t> planes;
 
     auto* map = GW::GetMapContext();
-    if (!map || !map->sub1 || !map->sub1->sub2)
+    if (!map || !map->path || !map->path->staticData)
         return planes;
 
-    auto& pmaps = map->sub1->sub2->pmaps;
+    auto& pmaps = map->path->staticData->map;
     for (size_t i = 0; i < pmaps.size(); ++i) {
         planes.push_back(static_cast<uint32_t>(i));
     }
@@ -201,10 +201,10 @@ std::vector<uint32_t> GetValidZPlanes() {
 
 float QueryZ(float x, float y, uint32_t plane) {
     auto* map = GW::GetMapContext();
-    if (!map || !map->sub1 || !map->sub1->sub2)
+    if (!map || !map->path || !map->path->staticData)
         return 0.0f;
 
-    if (map->sub1->sub2->pmaps.size() <= plane)
+    if (map->path->staticData->map.size() <= plane)
         return 0.0f;
 
     GW::GamePos gp(x, y, plane);
@@ -368,8 +368,8 @@ Point2D Overlay::GamePosToWorldMap(float x, float y) {
         return Point2D(0, 0);
 
     const auto game_map_rect = ImRect({
-        current_map_context->map_boundaries[1], current_map_context->map_boundaries[2],
-        current_map_context->map_boundaries[3], current_map_context->map_boundaries[4],
+        current_map_context->start_pos.x, current_map_context->start_pos.y,
+        current_map_context->end_pos.x,   current_map_context->end_pos.y,
         });
 
     // NB: World map is 96 gwinches per unit, this is hard coded in the GW source
@@ -401,8 +401,8 @@ Point2D Overlay::WorlMapToGamePos(float x, float y) {
         return Point2D(0, 0);
 
     const auto game_map_rect = ImRect({
-        current_map_context->map_boundaries[1], current_map_context->map_boundaries[2],
-        current_map_context->map_boundaries[3], current_map_context->map_boundaries[4],
+        current_map_context->start_pos.x, current_map_context->start_pos.y,
+        current_map_context->end_pos.x,   current_map_context->end_pos.y,
         });
 
     // NB: World map is 96 gwinches per unit, this is hard coded in the GW source
@@ -1222,7 +1222,7 @@ bool ScreenOverlay::CreatePrimary(int ms, bool destroy) {
 
     DWORD ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
     hwnd_ = CreateWindowExW(ex, L"DesktopOverlayBox", L"", WS_POPUP,
-        vx, vy, vw, vh,    // <— position at virtual origin, size to full span
+        vx, vy, vw, vh,    // <ï¿½ position at virtual origin, size to full span
         nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!hwnd_) return false;
 
@@ -1234,7 +1234,7 @@ bool ScreenOverlay::CreatePrimary(int ms, bool destroy) {
     memdc_ = CreateCompatibleDC(nullptr);
     if (!memdc_) return false;
 
-    if (!ensureBitmap(vw, vh)) return false;   // <— bitmap matches virtual size
+    if (!ensureBitmap(vw, vh)) return false;   // <ï¿½ bitmap matches virtual size
 
     // Subclass THIS window only; refdata = this
     SetWindowSubclass(hwnd_, &ScreenOverlay::SubclassProc, 0xBEEF, reinterpret_cast<DWORD_PTR>(this));
@@ -1340,7 +1340,7 @@ bool ScreenOverlay::present() {
     if (!hwnd_ || !dib_) return false;
     HDC screen = GetDC(nullptr);
     POINT src = { 0, 0 };
-    POINT dst = virtual_origin_;          // <— was {0,0}; must be virtual origin
+    POINT dst = virtual_origin_;          // <ï¿½ was {0,0}; must be virtual origin
     SIZE  sz = size_;
     BOOL ok = UpdateLayeredWindow(hwnd_, screen, &dst, &sz, memdc_, &src, 0, &bf_, ULW_ALPHA);
     ReleaseDC(nullptr, screen);

@@ -7,6 +7,9 @@ namespace GW {
     struct PreGameContext;
     GWCA_API PreGameContext* GetPreGameContext();
 
+    struct CharacterInformation;
+    GWCA_API Array<CharacterInformation>* GetAvailableChars();
+
     struct LoginCharacter {
         uint32_t unk0;
         uint32_t pvp_or_campaign;
@@ -20,6 +23,24 @@ namespace GW {
 		uint32_t Unk02[7];
         wchar_t character_name[20];
     };
+
+    // Character information available at the login screen. Returned by
+    // GetAvailableChars(). Distinct from PreGameContext::chars; py4gw's
+    // Python AvailableCharacterStruct mirrors this layout.
+    struct CharacterInformation {
+        /* +h0000 */ uint32_t h0000[2];
+        /* +h0008 */ uint32_t uuid[4];
+        /* +h0018 */ wchar_t  name[20];
+        /* +h0040 */ uint32_t props[17];
+
+        uint32_t GetMapId()              const { return (props[0] >> 16) & 0xFFFF; }
+        uint32_t GetPrimaryProfession()  const { return (props[2] >> 20) & 0xF; }
+        uint32_t GetSecondaryProfession() const { return (props[7] >> 10) & 0xF; }
+        uint32_t GetCampaign()           const { return  props[7]        & 0xF; }
+        uint32_t GetLevel()              const { return (props[7] >> 4)  & 0x3F; }
+        bool     IsPvP()                 const { return ((props[7] >> 9) & 0x1) == 0x1; }
+    };
+
     struct PreGameContext {
         uint32_t frame_id;
 		uint32_t Unk01[20];

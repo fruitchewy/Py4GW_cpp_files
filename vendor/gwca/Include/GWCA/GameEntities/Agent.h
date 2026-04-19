@@ -27,27 +27,27 @@ namespace GW {
 
     typedef TList<VisibleEffect> VisibleEffectList;
 
+    struct NPCEquipment;
     struct EquipmentVTable {
-        void(__fastcall* Destroy)(void* this_ptr);
-        void(__fastcall* GetItemClassFlags)(void* this_ptr, uint32_t edx, uint32_t slot);
-        void(__fastcall* EquipItem)(void* this_ptr, uint32_t edx, uint32_t slot);
-        void(__fastcall* LoadModelMaybe)(void* this_ptr, uint32_t edx, uint32_t slot);
-        void(__fastcall* RemoveItem)(void* this_ptr, uint32_t edx, uint32_t slot);
-        void(__fastcall* RefreshModelMaybe)(void* this_ptr);
-        bool(__fastcall* ModelRelatedBooleanCheck)(void* this_ptr);
-        uint32_t(__fastcall* GetType)(void* this_ptr);
+        void(__fastcall* Destroy)(NPCEquipment* this_ptr);
+        void(__fastcall* GetItemClassFlags)(NPCEquipment* this_ptr, uint32_t edx, uint32_t slot);
+        void(__fastcall* EquipItem)(NPCEquipment* this_ptr, uint32_t edx, uint32_t slot);
+        void(__fastcall* LoadModelMaybe)(NPCEquipment* this_ptr, uint32_t edx, uint32_t slot);
+        void(__fastcall* RemoveItem)(NPCEquipment* this_ptr, uint32_t edx, uint32_t slot);
+        void(__fastcall* RefreshModelMaybe)(NPCEquipment* this_ptr);
+        bool(__fastcall* ModelRelatedBooleanCheck)(NPCEquipment* this_ptr);
+        uint32_t(__fastcall* GetType)(NPCEquipment* this_ptr);
     };
 
     // Courtesy of DerMonech14
-    struct Equipment {
-
-        /* +h0000 */ void* vtable;
+    struct NPCEquipment {
+        /* +h0000 */ EquipmentVTable* vtable;
         /* +h0004 */ uint32_t h0004;            // always 2 ?
-        /* +h0008 */ uint32_t h0008;            // Ptr PlayerModelFile?
-        /* +h000C */ uint32_t h000C;            // 
-        /* +h0010 */ ItemData* reft_hand_ptr;   // Ptr Bow, Hammer, Focus, Daggers, Scythe
+        /* +h0008 */ void* model_handle;        // Ptr PlayerModelFile?
+        /* +h000C */ uint32_t h000C;            //
+        /* +h0010 */ ItemData* left_hand_ptr;   // Ptr Bow, Hammer, Focus, Daggers, Scythe
         /* +h0014 */ ItemData* right_hand_ptr;  // Ptr Sword, Spear, Staff, Daggers, Axe, Zepter, Bundle
-        /* +h0018 */ uint32_t h0018;            // 
+        /* +h0018 */ uint32_t h0018;            //
         /* +h001C */ ItemData* shield_ptr;      // Ptr Shield
         /* +h0020 */ uint8_t left_hand_map;     // Weapon1     None = 9, Bow = 0, Hammer = 0, Focus = 1, Daggers = 0, Scythe = 0
         /* +h0021 */ uint8_t right_hand_map;    // Weapon2     None = 9, Sword = 0, Spear = 0, Staff = 0, Daggers = 0, Axe = 0, Zepter = 0, Bundle
@@ -81,7 +81,55 @@ namespace GW {
                 /* +h00D4 */ ItemID item_id_costume_head;
             };
         };
+        /* +h00D8 */ uint32_t h00D8[0x7];       // Padding (28 bytes = 7 uint32_t)
+        /* +h00F4 */ uint8_t h00F4[5];          // Padding (5 bytes)
+        /* +h00F9 */ uint8_t weapon_item_type;  // Weapon item type for stance/animation
+        /* +h00FA */ uint16_t weapon_item_id;   // Weapon item id for stance/animation
+        /* +h00FC */ uint8_t h00FC[0xD];        // Padding (13 bytes)
+        /* +h0109 */ uint8_t offhand_item_type; // Offhand item type for stance/animation
+        /* +h010A */ uint16_t offhand_item_id;  // Offhand item id for stance/animation
+
+        inline uint32_t GetType() {
+            return vtable->GetType(this);
+        }
+        inline bool RedrawEquipmentSlot(uint32_t slot) {
+            if (!(slot < _countof(items) && items[slot].model_file_id))
+                return false;
+            return vtable->EquipItem(this, 0, slot), true;
+        }
+        inline bool UndrawEquipmentSlot(uint32_t slot) {
+            if (!(slot < _countof(items) && items[slot].model_file_id))
+                return false;
+            return vtable->RemoveItem(this, 0, slot), true;
+        }
     };
+    static_assert(sizeof(NPCEquipment) == 0x10C);
+
+    struct PlayerEquipment : NPCEquipment {
+        /* +h010C */ uint32_t h010C;            // From constructor param_3
+        /* +h0110 */ uint32_t h0110[0xB2];      // Padding (178 uint32_t = 0x2C8 bytes)
+        /* +h03D8 */ uint32_t equipment_flags;  // Equipment redraw flags (0xFFFFFFFF = needs draw, 0x00000000 = fully drawn)
+        /* +h03DC */ uint32_t h03DC;            // Initialized to 0
+        /* +h03E0 */ uint32_t visibility_flags; // Equipment visibility flags (0xFFFFFFFF initial)
+        /* +h03E4 */ uint32_t h03E4;            // param_1 from constructor
+        /* +h03E8 */ uint32_t h03E8[4];         // Padding to reach 0x3F8 (16 bytes)
+
+        // Check if any equipment is waiting for redraw (any bits set)
+        inline bool PendingRedraw() {
+            return equipment_flags != 0;
+        }
+
+        // Check if equipment needs initial draw (all bits set)
+        inline bool PendingFirstDraw() {
+            return equipment_flags == 0xFFFFFFFF;
+        }
+
+        // Check if equipment is fully drawn (all bits cleared)
+        inline bool IsFullyDrawn() {
+            return equipment_flags == 0;
+        }
+    };
+    static_assert(sizeof(PlayerEquipment) == 0x3F8);
 
     struct TagInfo {
         /* +h0000 */ uint16_t guild_id;
@@ -195,7 +243,7 @@ namespace GW {
         /* +h00F4 */ uint16_t player_number; // Selfexplanatory. All non-players have identifiers for their type. Two of the same mob = same number
         /* +h00F6 */ uint16_t agent_model_type; // Player = 0x3000, NPC = 0x2000
         /* +h00F8 */ uint32_t transmog_npc_id; // Actually, it's 0x20000000 | npc_id, It's not defined for npc, minipet, etc...
-        /* +h00FC */ Equipment** equip;
+        /* +h00FC */ NPCEquipment** equip;
         /* +h0100 */ uint32_t h0100;
         /* +h0104 */ uint32_t h0104; // New variable added here
         /* +h0108 */ TagInfo* tags;  // struct { uint16_t guild_id, uint8_t primary, uint8_t secondary, uint16_t level
@@ -243,6 +291,7 @@ namespace GW {
         // Health Bar Effect Bitmasks.
         inline bool GetIsBleeding()        const { return (effects & 0x0001) != 0; }
         inline bool GetIsConditioned()     const { return (effects & 0x0002) != 0; }
+        inline bool GetIsUsedCorpse()      const { return (effects & 0x0004) != 0; }
         inline bool GetIsCrippled()        const { return (effects & 0x000A) == 0xA; }
         inline bool GetIsDead()            const { return (effects & 0x0010) != 0; }
         inline bool GetIsDeepWounded()     const { return (effects & 0x0020) != 0; }
@@ -350,18 +399,35 @@ namespace GW {
     };
 
     struct AgentMovement {
-        /* +h0000 */ uint32_t h0000[3];
+        /* +h0000 */ uint32_t h0000[2];
+        /* +h0008 */ uint32_t move_state;           // Movement phase (idle/moving/pathfinding transitions)
         /* +h000C */ uint32_t agent_id;
         /* +h0010 */ uint32_t h0010[3];
-        /* +h001C */ uint32_t agentDef; // GW_AGENTDEF_CHAR = 1
+        /* +h001C */ uint32_t agentDef;             // GW_AGENTDEF_CHAR = 1
         /* +h0020 */ uint32_t h0020[6];
-        /* +h0038 */ uint32_t moving1; //tells if you are stuck even if your client doesn't know
+        /* +h0038 */ uint32_t moving1;              // tells if you are stuck even if your client doesn't know
         /* +h003C */ uint32_t h003C[2];
-        /* +h0044 */ uint32_t moving2; //exactly same as Moving1
-        /* +h0048 */ uint32_t h0048[7];
-        /* +h0064 */ Vec3f h0064;
+        /* +h0044 */ uint32_t moving2;              // exactly same as moving1
+        /* +h0048 */ uint32_t h0048[5];
+        /* +h005C */ uint32_t h005C;
+        /* +h0060 */ float    speed_modifier;       // Movement speed multiplier. Increases sharply on aggro transition.
+        /* +h0064 */ Vec3f    position;             // (0, world_x, world_y)
         /* +h0070 */ uint32_t h0070;
-        /* +h0074 */ Vec3f h0074;
+        /* +h0074 */ Vec3f    position2;            // position copy
+        /* +h0080 */ uint32_t h0080[2];
+        /* +h0088 */ float    dest_x;               // Movement destination X (inf = stopped)
+        /* +h008C */ float    dest_y;               // Movement destination Y (inf = stopped)
+        /* +h0090 */ uint32_t h0090;
+        /* +h0094 */ uint32_t h0094;
+        /* +h0098 */ uint32_t movement_target_id;   // Agent ID of movement target (0 = none). Melee aggro only — casters may cast without setting this.
+        /* +h009C */ float    dest_x2;              // Cached destination X
+        /* +h00A0 */ float    dest_y2;              // Cached destination Y
+        /* +h00A4 */ uint32_t h00A4[3];
+        /* +h00B0 */ float    dir_offset_x;         // Direction vector to destination
+        /* +h00B4 */ float    dir_offset_y;         // Direction vector to destination
+        /* +h00B8 */ uint32_t h00B8;
+        /* +h00BC */ float    heading_sin;          // sin(movement heading)
+        /* +h00C0 */ float    heading_cos;          // cos(movement heading)
     };
 
     struct AgentInfo {
